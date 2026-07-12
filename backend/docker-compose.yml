@@ -1,0 +1,105 @@
+version: "3.8"
+
+services:
+  # ==========================================
+  # Database Layer (PostgreSQL)
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: senetebilling-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-senete_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-senete_billing_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - senete_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-senete_admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================
+  # Cache & Queue Layer (Redis)
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: senetebilling-redis
+    # Enable Append Only File (AOF) for Redis persistence
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - senete_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================
+  # Backend API (Node.js / API Gateway)
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: senetebilling-backend
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-senete_admin}:${POSTGRES_PASSWORD:-secure_password}@postgres:5432/${POSTGRES_DB:-senete_billing_db}
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - senete_network
+    restart: unless-stopped
+
+  # ==========================================
+  # Frontend (React / Nginx)
+  #
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: senetebilling-frontend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - backend
+    networks:
+      - senete_network
+    restart: unless-stopped
+
+# ==========================================
+# Network Configuration
+# ==========================================
+networks:
+  senete_network:
+    driver: bridge
+
+# ==========================================
+# Persistent Volumes
+# ==========================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
