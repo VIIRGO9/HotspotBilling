@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { routerService } from "../services/routerService";
+import api from "../services/api";
 import RouterFormModal from "../components/RouterFormModal";
 import toast from "react-hot-toast";
 
@@ -9,16 +10,26 @@ const Routers = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingRouter, setEditingRouter] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [filters, setFilters] = useState({
-    status: "",
-    type: "",
-    q: "",
-  });
+  const [showArchived, setShowArchived] = useState(false);
+  const [filters, setFilters] = useState({ status: "", type: "", q: "" });
+
+  const handleTestConnection = async (id, name) => {
+    toast.loading(`Testing connection to ${name}...`, { id: "test-conn" });
+    try {
+      const response = await api.post(`/routers/${id}/test-connection`);
+      toast.dismiss("test-conn");
+      toast.success(response.data.message);
+      fetchRouters();
+    } catch (error) {
+      toast.dismiss("test-conn");
+      toast.error(error.response?.data?.message || "Connection failed");
+    }
+  };
 
   const fetchRouters = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {};
+      const params = { includeArchived: showArchived.toString() };
       if (filters.status) params.status = filters.status;
       if (filters.type) params.type = filters.type;
       if (filters.q) params.q = filters.q;
@@ -30,24 +41,26 @@ const Routers = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, showArchived]);
 
-  useEffect(() => {
-    fetchRouters();
-  }, [fetchRouters]);
+  useEffect(() => { fetchRouters(); }, [fetchRouters]);
 
   const handleCreate = async (routerData) => {
     try {
       setSubmitting(true);
-      await routerService.createRouter(routerData);
-      toast.success("Router added successfully");
+      toast.loading("Testing network connection...", { id: "router-creation" });
+      const result = await routerService.createRouter(routerData);
+      toast.dismiss("router-creation");
+
+      if (result._isConnected) toast.success("Router added and connected! Status: ONLINE");
+      else toast.warning("Router saved, but connection failed. Status: OFFLINE.");
+      
       setShowModal(false);
       fetchRouters();
     } catch (error) {
+      toast.dismiss("router-creation");
       toast.error(error.response?.data?.message || "Failed to add router");
-    } finally {
-      setSubmitting(false);
-    }
+    } finally { setSubmitting(false); }
   };
 
   const handleUpdate = async (routerData) => {
@@ -60,95 +73,74 @@ const Routers = () => {
       fetchRouters();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update router");
-    } finally {
-      setSubmitting(false);
-    }
+    } finally { setSubmitting(false); }
   };
 
-  const handleStatusChange = async (id, newStatus) => {
+  const handleStatusChange = async (id, newStatus, routerName) => {
+    if (newStatus === "ONLINE") toast.loading(`Testing connection to ${routerName}...`, { id: "status-change" });
     try {
       await routerService.updateRouterStatus(id, newStatus);
+      toast.dismiss("status-change");
       toast.success(`Router status updated to ${newStatus}`);
       fetchRouters();
     } catch (error) {
+      toast.dismiss("status-change");
       toast.error(error.response?.data?.message || "Failed to update status");
     }
   };
 
   const handleDelete = async (id, name) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to archive "${name}"? This will remove the router from the system.`,
-      )
-    ) {
-      return;
-    }
-
+    if (!window.confirm(`Archive "${name}"?`)) return;
     try {
       await routerService.deleteRouter(id);
-      toast.success("Router archived successfully");
+      toast.success("Router archived");
       fetchRouters();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to archive router");
-    }
+    } catch (error) { toast.error(error.response?.data?.message || "Failed to archive"); }
   };
 
-  const openEditModal = (router) => {
-    setEditingRouter(router);
-    setShowModal(true);
+  const handleRestore = async (id, name) => {
+    if (!window.confirm(`Restore "${name}"?`)) return;
+    try {
+      await api.patch(`/routers/${id}/restore`);
+      toast.success("Router restored successfully");
+      fetchRouters();
+    } catch (error) { toast.error(error.response?.data?.message || "Failed to restore"); }
   };
 
-  const openCreateModal = () => {
-    setEditingRouter(null);
-    setShowModal(true);
+  const handlePermanentDelete = async (id, name) => {
+    if (!window.confirm(`PERMANENTLY DELETE "${name}"? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/routers/${id}/permanent`);
+      toast.success("Router permanently deleted");
+      fetchRouters();
+    } catch (error) { toast.error(error.response?.data?.message || "Failed to delete"); }
   };
+
+  const openEditModal = (router) => { setEditingRouter(router); setShowModal(true); };
+  const openCreateModal = () => { setEditingRouter(null); setShowModal(true); };
 
   const getStatusBadge = (status) => {
-    const badges = {
-      ONLINE: "bg-success-subtle text-success",
-      OFFLINE: "bg-danger-subtle text-danger",
-      MAINTENANCE: "bg-warning-subtle text-warning",
-    };
+    const badges = { ONLINE: "bg-success-subtle text-success", OFFLINE: "bg-danger-subtle text-danger", MAINTENANCE: "bg-warning-subtle text-warning" };
     return badges[status] || "bg-light text-dark";
   };
-
   const getStatusIcon = (status) => {
-    const icons = {
-      ONLINE: "bi-wifi",
-      OFFLINE: "bi-wifi-off",
-      MAINTENANCE: "bi-tools",
-    };
+    const icons = { ONLINE: "bi-wifi", OFFLINE: "bi-wifi-off", MAINTENANCE: "bi-tools" };
     return icons[status] || "bi-router";
   };
-
   const getTypeBadge = (type) => {
-    const badges = {
-      MIKROTIK: "bg-primary-subtle text-primary",
-      OPENWRT: "bg-info-subtle text-info",
-      OTHER: "bg-secondary-subtle text-secondary",
-    };
+    const badges = { MIKROTIK: "bg-primary-subtle text-primary", OPENWRT: "bg-info-subtle text-info", OTHER: "bg-secondary-subtle text-secondary" };
     return badges[type] || "bg-light text-dark";
   };
-
   const formatDate = (dateString) => {
     if (!dateString) return "Never";
-    return new Date(dateString).toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return new Date(dateString).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   };
-
-  const getStats = () => {
-    return {
-      total: routers.length,
-      online: routers.filter((r) => r.status === "ONLINE").length,
-      offline: routers.filter((r) => r.status === "OFFLINE").length,
-      maintenance: routers.filter((r) => r.status === "MAINTENANCE").length,
-    };
-  };
+  const getStats = () => ({
+    total: routers.length,
+    online: routers.filter((r) => r.status === "ONLINE").length,
+    offline: routers.filter((r) => r.status === "OFFLINE").length,
+    maintenance: routers.filter((r) => r.status === "MAINTENANCE").length,
+  });
 
   const stats = getStats();
 
@@ -157,121 +149,40 @@ const Routers = () => {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h3 className="fw-bold mb-1">Router Management</h3>
-          <p className="text-muted small mb-0">
-            Register and monitor network routers
-          </p>
+          <p className="text-muted small mb-0">Register and monitor network routers</p>
         </div>
         <button className="btn btn-primary" onClick={openCreateModal}>
-          <i className="bi bi-router me-2"></i>
-          Add Router
+          <i className="bi bi-router me-2"></i> Add Router
         </button>
       </div>
 
       {/* Stats Cards */}
       <div className="row mb-4">
         <div className="col-md-3 col-sm-6 mb-3">
-          <div className="card border-0 shadow-sm h-100">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div
-                  className="rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center me-3"
-                  style={{ width: "48px", height: "48px" }}
-                >
-                  <i className="bi bi-router text-primary fs-5"></i>
-                </div>
-                <div>
-                  <div className="text-muted small">Total Routers</div>
-                  <div className="fs-4 fw-bold">{stats.total}</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex align-items-center"><div className="rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center me-3" style={{ width: "48px", height: "48px" }}><i className="bi bi-router text-primary fs-5"></i></div><div><div className="text-muted small">Total Routers</div><div className="fs-4 fw-bold">{stats.total}</div></div></div></div></div>
         </div>
         <div className="col-md-3 col-sm-6 mb-3">
-          <div className="card border-0 shadow-sm h-100">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div
-                  className="rounded-circle bg-success-subtle d-flex align-items-center justify-content-center me-3"
-                  style={{ width: "48px", height: "48px" }}
-                >
-                  <i className="bi bi-wifi text-success fs-5"></i>
-                </div>
-                <div>
-                  <div className="text-muted small">Online</div>
-                  <div className="fs-4 fw-bold text-success">
-                    {stats.online}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex align-items-center"><div className="rounded-circle bg-success-subtle d-flex align-items-center justify-content-center me-3" style={{ width: "48px", height: "48px" }}><i className="bi bi-wifi text-success fs-5"></i></div><div><div className="text-muted small">Online</div><div className="fs-4 fw-bold text-success">{stats.online}</div></div></div></div></div>
         </div>
         <div className="col-md-3 col-sm-6 mb-3">
-          <div className="card border-0 shadow-sm h-100">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div
-                  className="rounded-circle bg-danger-subtle d-flex align-items-center justify-content-center me-3"
-                  style={{ width: "48px", height: "48px" }}
-                >
-                  <i className="bi bi-wifi-off text-danger fs-5"></i>
-                </div>
-                <div>
-                  <div className="text-muted small">Offline</div>
-                  <div className="fs-4 fw-bold text-danger">
-                    {stats.offline}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex align-items-center"><div className="rounded-circle bg-danger-subtle d-flex align-items-center justify-content-center me-3" style={{ width: "48px", height: "48px" }}><i className="bi bi-wifi-off text-danger fs-5"></i></div><div><div className="text-muted small">Offline</div><div className="fs-4 fw-bold text-danger">{stats.offline}</div></div></div></div></div>
         </div>
         <div className="col-md-3 col-sm-6 mb-3">
-          <div className="card border-0 shadow-sm h-100">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div
-                  className="rounded-circle bg-warning-subtle d-flex align-items-center justify-content-center me-3"
-                  style={{ width: "48px", height: "48px" }}
-                >
-                  <i className="bi bi-tools text-warning fs-5"></i>
-                </div>
-                <div>
-                  <div className="text-muted small">Maintenance</div>
-                  <div className="fs-4 fw-bold text-warning">
-                    {stats.maintenance}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex align-items-center"><div className="rounded-circle bg-warning-subtle d-flex align-items-center justify-content-center me-3" style={{ width: "48px", height: "48px" }}><i className="bi bi-tools text-warning fs-5"></i></div><div><div className="text-muted small">Maintenance</div><div className="fs-4 fw-bold text-warning">{stats.maintenance}</div></div></div></div></div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters Section */}
       <div className="card border-0 shadow-sm mb-4">
         <div className="card-body">
-          <div className="row g-3">
-            <div className="col-md-4">
+          <div className="row g-3 align-items-end">
+            <div className="col-md-3">
               <label className="form-label small">Search</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Name, IP, or location..."
-                value={filters.q}
-                onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-              />
+              <input type="text" className="form-control" placeholder="Name, IP, or location..." value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
             </div>
             <div className="col-md-3">
               <label className="form-label small">Status</label>
-              <select
-                className="form-select"
-                value={filters.status}
-                onChange={(e) =>
-                  setFilters({ ...filters, status: e.target.value })
-                }
-              >
+              <select className="form-select" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
                 <option value="">All Statuses</option>
                 <option value="ONLINE">Online</option>
                 <option value="OFFLINE">Offline</option>
@@ -280,52 +191,35 @@ const Routers = () => {
             </div>
             <div className="col-md-3">
               <label className="form-label small">Type</label>
-              <select
-                className="form-select"
-                value={filters.type}
-                onChange={(e) =>
-                  setFilters({ ...filters, type: e.target.value })
-                }
-              >
+              <select className="form-select" value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
                 <option value="">All Types</option>
                 <option value="MIKROTIK">MikroTik</option>
                 <option value="OPENWRT">OpenWrt</option>
                 <option value="OTHER">Other</option>
               </select>
             </div>
-            <div className="col-md-2 d-flex align-items-end">
-              <button
-                className="btn btn-outline-secondary w-100"
-                onClick={() => setFilters({ status: "", type: "", q: "" })}
-              >
-                <i className="bi bi-x-circle me-1"></i>
-                Clear
+            <div className="col-md-3 d-flex flex-column gap-2">
+              <div className="form-check">
+                <input className="form-check-input" type="checkbox" id="showArchived" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+                <label className="form-check-label small" htmlFor="showArchived">Show Archived Routers</label>
+              </div>
+              <button className="btn btn-outline-secondary btn-sm" onClick={() => { setFilters({ status: "", type: "", q: "" }); setShowArchived(false); }}>
+                <i className="bi bi-x-circle me-1"></i> Clear Filters
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Router List */}
+      {/* Router List Table */}
       <div className="card border-0 shadow-sm">
         <div className="card-body p-0">
           {loading ? (
-            <div className="d-flex justify-content-center align-items-center py-5">
-              <div className="spinner-border text-primary"></div>
-            </div>
+            <div className="d-flex justify-content-center align-items-center py-5"><div className="spinner-border text-primary"></div></div>
           ) : routers.length === 0 ? (
             <div className="text-center py-5">
-              <i
-                className="bi bi-router text-muted"
-                style={{ fontSize: "3rem" }}
-              ></i>
+              <i className="bi bi-router text-muted" style={{ fontSize: "3rem" }}></i>
               <p className="text-muted mt-3 mb-0">No routers found</p>
-              <button
-                className="btn btn-primary btn-sm mt-3"
-                onClick={openCreateModal}
-              >
-                Add Your First Router
-              </button>
             </div>
           ) : (
             <div className="table-responsive">
@@ -344,115 +238,63 @@ const Routers = () => {
                 </thead>
                 <tbody>
                   {routers.map((router) => (
-                    <tr key={router.id}>
+                    <tr key={router.id} className={router.deletedAt ? "table-secondary" : ""}>
                       <td className="ps-3">
                         <div className="d-flex align-items-center">
-                          {router.isDefault && (
-                            <span
-                              className="badge bg-warning text-dark me-2"
-                              title="Default Router"
-                            >
-                              <i className="bi bi-star-fill"></i>
-                            </span>
-                          )}
+                          {router.isDefault && <span className="badge bg-warning text-dark me-2"><i className="bi bi-star-fill"></i></span>}
                           <div>
                             <div className="fw-medium">{router.name}</div>
-                            {router.modelName && (
-                              <div className="text-muted small">
-                                {router.modelName}
-                              </div>
-                            )}
+                            {router.modelName && <div className="text-muted small">{router.modelName}</div>}
+                            {router.deletedAt && <span className="badge bg-secondary text-white mt-1" style={{ fontSize: "0.7rem" }}>Archived</span>}
                           </div>
                         </div>
                       </td>
-                      <td>
-                        <span className={`badge ${getTypeBadge(router.type)}`}>
-                          {router.type}
-                        </span>
-                      </td>
-                      <td className="font-monospace small">
-                        {router.ipAddress}:{router.apiPort}
-                      </td>
+                      <td><span className={`badge ${getTypeBadge(router.type)}`}>{router.type}</span></td>
+                      <td className="font-monospace small">{router.ipAddress}:{router.apiPort}</td>
                       <td className="small">{router.location || "-"}</td>
-                      <td>
-                        <span
-                          className={`badge ${getStatusBadge(router.status)}`}
-                        >
-                          <i
-                            className={`bi ${getStatusIcon(router.status)} me-1`}
-                          ></i>
-                          {router.status}
-                        </span>
-                      </td>
-                      <td className="small text-muted">
-                        {formatDate(router.lastSeen)}
-                      </td>
-                      <td>
-                        <span className="badge bg-light text-dark border">
-                          <i className="bi bi-people me-1"></i>
-                          {router._count?.sessions || 0}
-                        </span>
-                      </td>
+                      <td><span className={`badge ${getStatusBadge(router.status)}`}><i className={`bi ${getStatusIcon(router.status)} me-1`}></i>{router.status}</span></td>
+                      <td className="small text-muted">{formatDate(router.lastSeen)}</td>
+                      <td><span className="badge bg-light text-dark border"><i className="bi bi-people me-1"></i>{router._count?.sessions || 0}</span></td>
+                      
+                      {/* ACTIONS COLUMN */}
                       <td className="pe-3 text-end">
                         <div className="btn-group btn-group-sm">
-                          <button
-                            className="btn btn-outline-primary"
-                            onClick={() => openEditModal(router)}
-                            title="Edit"
-                          >
-                            <i className="bi bi-pencil"></i>
-                          </button>
-                          {router.status === "OFFLINE" && (
-                            <button
-                              className="btn btn-outline-success"
-                              onClick={() =>
-                                handleStatusChange(router.id, "ONLINE")
-                              }
-                              title="Mark Online"
-                            >
-                              <i className="bi bi-play-circle"></i>
+                          {!router.deletedAt && (
+                            <button className="btn btn-outline-info" onClick={() => handleTestConnection(router.id, router.name)} title="Test API Connection">
+                              <i className="bi bi-activity"></i>
                             </button>
                           )}
-                          {router.status === "ONLINE" && (
+
+                          <button className="btn btn-outline-primary" onClick={() => openEditModal(router)} title="Edit" disabled={!!router.deletedAt}>
+                            <i className="bi bi-pencil"></i>
+                          </button>
+
+                          {!router.deletedAt ? (
                             <>
-                              <button
-                                className="btn btn-outline-warning"
-                                onClick={() =>
-                                  handleStatusChange(router.id, "MAINTENANCE")
-                                }
-                                title="Maintenance"
-                              >
-                                <i className="bi bi-tools"></i>
+                              {router.status === "OFFLINE" && (
+                                <button className="btn btn-outline-success" onClick={() => handleStatusChange(router.id, "ONLINE", router.name)} title="Mark Online (Tests Connection)"><i className="bi bi-play-circle"></i></button>
+                              )}
+                              {router.status === "ONLINE" && (
+                                <>
+                                  <button className="btn btn-outline-warning" onClick={() => handleStatusChange(router.id, "MAINTENANCE", router.name)} title="Maintenance"><i className="bi bi-tools"></i></button>
+                                  <button className="btn btn-outline-danger" onClick={() => handleStatusChange(router.id, "OFFLINE", router.name)} title="Mark Offline"><i className="bi bi-stop-circle"></i></button>
+                                </>
+                              )}
+                              {router.status === "MAINTENANCE" && (
+                                <button className="btn btn-outline-success" onClick={() => handleStatusChange(router.id, "ONLINE", router.name)} title="Bring Online (Tests Connection)"><i className="bi bi-play-circle"></i></button>
+                              )}
+                              <button className="btn btn-outline-secondary" onClick={() => handleDelete(router.id, router.name)} title="Archive"><i className="bi bi-archive"></i></button>
+                            </>
+                          ) : (
+                            <>
+                              <button className="btn btn-outline-success" onClick={() => handleRestore(router.id, router.name)} title="Restore Router">
+                                <i className="bi bi-arrow-counterclockwise"></i>
                               </button>
-                              <button
-                                className="btn btn-outline-danger"
-                                onClick={() =>
-                                  handleStatusChange(router.id, "OFFLINE")
-                                }
-                                title="Mark Offline"
-                              >
-                                <i className="bi bi-stop-circle"></i>
+                              <button className="btn btn-danger" onClick={() => handlePermanentDelete(router.id, router.name)} title="Permanent Delete">
+                                <i className="bi bi-trash"></i>
                               </button>
                             </>
                           )}
-                          {router.status === "MAINTENANCE" && (
-                            <button
-                              className="btn btn-outline-success"
-                              onClick={() =>
-                                handleStatusChange(router.id, "ONLINE")
-                              }
-                              title="Bring Online"
-                            >
-                              <i className="bi bi-play-circle"></i>
-                            </button>
-                          )}
-                          <button
-                            className="btn btn-outline-danger"
-                            onClick={() => handleDelete(router.id, router.name)}
-                            title="Archive"
-                          >
-                            <i className="bi bi-archive"></i>
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -466,10 +308,7 @@ const Routers = () => {
 
       <RouterFormModal
         show={showModal}
-        onHide={() => {
-          setShowModal(false);
-          setEditingRouter(null);
-        }}
+        onHide={() => { setShowModal(false); setEditingRouter(null); }}
         onSubmit={editingRouter ? handleUpdate : handleCreate}
         initialData={editingRouter}
         loading={submitting}

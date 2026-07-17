@@ -20,7 +20,7 @@ export const PackageService = {
   },
 
   getAllPackages: async (isActiveOnly = false) => {
-    const filters = isActiveOnly ? { status: "ACTIVE", isActive: true } : {};
+    const filters = isActiveOnly ? { status: "ACTIVE" } : {};
     return PackageRepository.findAll(filters);
   },
 

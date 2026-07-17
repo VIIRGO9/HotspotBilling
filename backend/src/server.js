@@ -46,7 +46,13 @@ app.use(
     origin: true, // Reflects request origin (allow all for dev)
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-mac-address",
+      "x-ip-address",
+      "x-router-id",
+    ],
   })
 );
 

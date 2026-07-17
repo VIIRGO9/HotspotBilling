@@ -1,4 +1,3 @@
-// backend/src/modules/router/router.repository.js
 import { prisma } from "../../shared/database/prisma.js";
 
 export const RouterRepository = {
@@ -6,49 +5,92 @@ export const RouterRepository = {
     return prisma.router.create({ data });
   },
 
-  findById: async (id) => {
-    return prisma.router.findFirst({
-      where: { id, deletedAt: null },
-      include: { _count: { select: { sessions: true } } },
-    });
-  },
+  findMany: async (where, skip, limit) => {
+    // Build the query options dynamically
+    const queryOptions = {
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        _count: {
+          select: {
+            sessions: true,
+          },
+        },
+      },
+    };
 
-  findByIpAndPort: async (ipAddress, apiPort) => {
-    return prisma.router.findFirst({
-      where: { ipAddress, apiPort, deletedAt: null },
-    });
-  },
+    // Only add skip/take if they are valid integers to prevent Prisma validation errors
+    if (Number.isInteger(skip)) queryOptions.skip = skip;
+    if (Number.isInteger(limit)) queryOptions.take = limit;
 
-  findMany: async (where, skip, take) => {
-    const [data, total] = await prisma.$transaction([
-      prisma.router.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { createdAt: "desc" },
-        include: { _count: { select: { sessions: true } } },
-      }),
+    const [data, total] = await Promise.all([
+      prisma.router.findMany(queryOptions),
       prisma.router.count({ where }),
     ]);
+
     return { data, total };
   },
 
+  findById: async (id) => {
+    return prisma.router.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            sessions: true,
+          },
+        },
+      },
+    });
+  },
+
+  findDefault: async () => {
+    return prisma.router.findFirst({
+      where: { isDefault: true, deletedAt: null },
+    });
+  },
+
+  findByIpAndPort: async (ip, port) => {
+    return prisma.router.findFirst({
+      where: {
+        ipAddress: ip,
+        apiPort: port,
+        deletedAt: null, // Crucial: Ignore archived routers when checking for duplicates
+      },
+    });
+  },
+
+  clearDefaultFlags: async () => {
+    return prisma.router.updateMany({
+      where: { isDefault: true },
+      data: { isDefault: false },
+    });
+  },
+
   update: async (id, data) => {
-    return prisma.router.update({ where: { id }, data });
+    return prisma.router.update({
+      where: { id },
+      data,
+    });
   },
 
   softDelete: async (id) => {
     return prisma.router.update({
       where: { id },
-      data: { deletedAt: new Date(), status: "OFFLINE" },
+      data: { deletedAt: new Date() },
     });
   },
 
-  clearDefaultFlags: async () => {
-    // Helper to ensure only one router is marked as default
-    return prisma.router.updateMany({
-      where: { isDefault: true, deletedAt: null },
-      data: { isDefault: false },
+  restore: async (id) => {
+    return prisma.router.update({
+      where: { id },
+      data: { deletedAt: null, status: "OFFLINE" },
+    });
+  },
+
+  permanentDelete: async (id) => {
+    return prisma.router.delete({
+      where: { id },
     });
   },
 };

@@ -63,10 +63,11 @@ const Sessions = () => {
     if (!window.confirm(`Disconnect this session?\nMAC: ${macAddress}`)) return;
 
     try {
+      // 🔥 FIX: Send 'reason' to match the backend controller's expectation
       await sessionService.stopSession(id, {
-        terminateCause: "ADMIN_DISCONNECT",
+        reason: "ADMIN_DISCONNECT",
       });
-      toast.success("Session disconnected");
+      toast.success("Session disconnected successfully");
       fetchSessions();
       fetchActiveCount();
     } catch (error) {
@@ -94,19 +95,22 @@ const Sessions = () => {
     return icons[status] || "bi-wifi";
   };
 
+  // 🔥 FIX: Safely handle stringified BigInts from the backend
   const formatBytes = (bytes) => {
-    if (!bytes || bytes === 0) return "0 B";
+    const numBytes = Number(bytes);
+    if (!numBytes || numBytes === 0) return "0 B";
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+    const i = Math.floor(Math.log(numBytes) / Math.log(k));
+    return `${(numBytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
   };
 
   const formatDuration = (seconds) => {
-    if (!seconds) return "0s";
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const numSeconds = Number(seconds);
+    if (!numSeconds) return "0s";
+    const hrs = Math.floor(numSeconds / 3600);
+    const mins = Math.floor((numSeconds % 3600) / 60);
+    const secs = numSeconds % 60;
     if (hrs > 0) return `${hrs}h ${mins}m`;
     if (mins > 0) return `${mins}m ${secs}s`;
     return `${secs}s`;
@@ -123,14 +127,21 @@ const Sessions = () => {
     });
   };
 
+  // 🔥 FIX: Use Number() to prevent string concatenation (e.g., "0" + "1024" = "01024")
   const stats = useMemo(
     () => ({
       active: sessions.filter((s) => s.status === "ACTIVE").length,
-      totalBandwidth: sessions.reduce((acc, s) => acc + (s.totalBytes || 0), 0),
-      totalUpload: sessions.reduce((acc, s) => acc + (s.uploadBytes || 0), 0),
+      totalBandwidth: sessions.reduce(
+        (acc, s) => acc + Number(s.totalBytes || 0),
+        0
+      ),
+      totalUpload: sessions.reduce(
+        (acc, s) => acc + Number(s.uploadBytes || 0),
+        0
+      ),
       totalDownload: sessions.reduce(
-        (acc, s) => acc + (s.downloadBytes || 0),
-        0,
+        (acc, s) => acc + Number(s.downloadBytes || 0),
+        0
       ),
     }),
     [sessions],
@@ -350,7 +361,7 @@ const Sessions = () => {
                       </td>
                       <td>
                         <div className="font-monospace small">
-                          {session.macAddress}
+                          {session.macAddress || "-"}
                         </div>
                         {session.username &&
                           session.username !== session.macAddress && (

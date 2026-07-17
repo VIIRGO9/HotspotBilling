@@ -6,6 +6,13 @@ export const VoucherRepository = {
     return prisma.voucher.createMany({ data: vouchersData });
   },
 
+  findByCodes: async (codes) => {
+    return prisma.voucher.findMany({
+      where: { code: { in: codes }, deletedAt: null },
+      include: { package: true },
+    });
+  },
+
   findByCode: async (code) => {
     return prisma.voucher.findFirst({
       where: { code, deletedAt: null },
@@ -23,10 +30,12 @@ export const VoucherRepository = {
     });
   },
 
-  findByCodes: async (codes) => {
-    return prisma.voucher.findMany({
-      where: { code: { in: codes } },
-      include: { package: { select: { id: true, name: true, type: true } } },
+  findByCode: async (code) => {
+    return prisma.voucher.findUnique({
+      where: { code },
+      include: {
+        package: true
+      },
     });
   },
 
@@ -38,10 +47,14 @@ export const VoucherRepository = {
     });
   },
 
-  updateStatus: async (id, data) => {
+  updateStatus: async (id, status) => {
     return prisma.voucher.update({
       where: { id },
-      data,
+      data: { status },
     });
   },
 };
+
+
+
+

@@ -10,7 +10,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// --- ENUMS ---
+// ==========================================
+// ENUMS (Aligned with Database Standards)
+// ==========================================
+
 enum UserRole {
   ADMIN
   OPERATOR
@@ -45,6 +48,7 @@ enum RouterType {
 enum RouterStatus {
   ONLINE
   OFFLINE
+  ERROR
   MAINTENANCE
 }
 
@@ -53,6 +57,7 @@ enum PackageType {
   DATA
   UNLIMITED
   HYBRID
+  PROMOTIONAL
 }
 
 enum PackageStatus {
@@ -70,7 +75,6 @@ enum SubscriptionStatus {
 }
 
 enum VoucherStatus {
-  GENERATED
   ACTIVE
   USED
   EXPIRED
@@ -106,7 +110,6 @@ enum TransactionStatus {
 
 enum SessionStatus {
   ACTIVE
-  DISCONNECTED
   EXPIRED
   TERMINATED
 }
@@ -164,7 +167,9 @@ enum Currency {
   USD
 }
 
-// --- MODELS ---
+// ==========================================
+// MODELS
+// ==========================================
 
 model User {
   id       String     @id @default(uuid())
@@ -182,20 +187,19 @@ model User {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  deletedAt DateTime? // Soft Delete Policy
 
+  @@index([email])
+  @@index([phone])
+  @@index([status])
   @@map("users")
 }
 
-
-
-
-
 model Customer {
-  id           String  @id @default(uuid())
-  customerCode String  @unique
-  userId       String? @unique
-  user         User?   @relation(fields: [userId], references: [id])
+  id           String         @id @default(uuid())
+  customerCode String         @unique
+  userId       String?        @unique
+  user         User?          @relation(fields: [userId], references: [id])
 
   customerType CustomerType
   status       CustomerStatus @default(ACTIVE)
@@ -210,7 +214,7 @@ model Customer {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  deletedAt DateTime? // Soft Delete Policy
 
   sessions      Session[]
   payments      Payment[]
@@ -243,11 +247,12 @@ model Router {
   sessions  Session[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  deletedAt DateTime? // Soft Delete Policy
 
   @@unique([ipAddress, apiPort])
   @@index([status])
   @@index([lastSeen])
+  @@index([ipAddress])
   @@map("routers")
 }
 
@@ -263,7 +268,6 @@ model Package {
   uploadSpeedMbps   Int?
   dataLimitGB       Float?
   deviceLimit       Int           @default(1)
-  isActive          Boolean       @default(true)
   status            PackageStatus @default(ACTIVE)
   priority          Int           @default(0)
   sortOrder         Int           @default(0)
@@ -273,93 +277,102 @@ model Package {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  deletedAt DateTime? // Soft Delete Policy
 
   @@index([status])
   @@index([price])
+  @@index([type])
   @@map("packages")
 }
 
 model Subscription {
-  id         String   @id @default(uuid())
-  customerId String
-  packageId  String
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  package    Package  @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  id           String             @id @default(uuid())
+  customerId   String?            // Optional for pure voucher users
+  packageId    String
+  voucherId    String?            // Optional for account-based users
+  
+  customer     Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  package      Package            @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  voucher      Voucher?           @relation(fields: [voucherId], references: [id], onDelete: SetNull)
 
-  startDate   DateTime
-  endDate     DateTime
-  activatedAt DateTime?
-  expiredAt   DateTime?
-  status      SubscriptionStatus @default(PENDING)
-  autoRenew   Boolean            @default(false)
+  startDate    DateTime
+  endDate      DateTime
+  activatedAt  DateTime?
+  expiredAt    DateTime?
+  status       SubscriptionStatus @default(PENDING)
+  autoRenew    Boolean            @default(false)
 
-  payments Payment[]
-  sessions Session[]
+  payments     Payment[]
+  sessions     Session[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  // No deletedAt: Historical subscription records must be preserved
 
   @@index([customerId])
   @@index([packageId])
+  @@index([voucherId])
   @@index([status])
+  @@index([endDate])
   @@map("subscriptions")
 }
 
 model Voucher {
-  id            String  @id @default(uuid())
-  code          String  @unique @db.VarChar(30)
+  id            String        @id @default(uuid())
+  code          String        @unique @db.VarChar(30)
   packageId     String
   generatedById String?
-  package       Package @relation(fields: [packageId], references: [id], onDelete: Restrict)
-  generatedBy   User?   @relation(fields: [generatedById], references: [id], onDelete: SetNull)
+  
+  package       Package       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  generatedBy   User?         @relation(fields: [generatedById], references: [id], onDelete: SetNull)
 
-  status      VoucherStatus @default(GENERATED)
-  expiresAt   DateTime?
-  usedAt      DateTime?
-  batchNumber String?
-  printed     Boolean       @default(false)
-  printedAt   DateTime?
+  status        VoucherStatus @default(ACTIVE) // Standard: ACTIVE, not GENERATED
+  expiresAt     DateTime?
+  usedAt        DateTime?
+  batchNumber   String?
+  printed       Boolean       @default(false)
+  printedAt     DateTime?
 
-  session Session?
+  session       Session?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
+  deletedAt DateTime? // Soft Delete Policy
+ subscriptions Subscription[] 
   @@index([expiresAt])
   @@index([code])
   @@index([status])
+  @@index([batchNumber])
   @@map("vouchers")
 }
 
 model Payment {
-  id             String        @id @default(uuid())
+  id             String          @id @default(uuid())
   customerId     String
   subscriptionId String?
-  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  
+  customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  subscription   Subscription?   @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
-  amount   Decimal         @db.Decimal(12, 2)
-  currency Currency        @default(TZS)
-  provider PaymentProvider
-  status   PaymentStatus   @default(PENDING)
+  amount         Decimal         @db.Decimal(12, 2)
+  currency       Currency        @default(TZS)
+  provider       PaymentProvider
+  status         PaymentStatus   @default(PENDING)
 
   paidAt           DateTime?
-  receiptNumber    String?   @unique
+  receiptNumber    String?       @unique
   paymentReference String?
   providerPhone    String?
   notes            String?
 
   receivedById String?
-  receivedBy   User?   @relation(fields: [receivedById], references: [id], onDelete: SetNull)
+  receivedBy   User?         @relation(fields: [receivedById], references: [id], onDelete: SetNull)
 
-  transaction Transaction?
+  transaction  Transaction?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  deletedAt DateTime? // Soft Delete Policy
 
   @@index([provider])
   @@index([paidAt])
@@ -370,9 +383,9 @@ model Payment {
 }
 
 model Transaction {
-  id        String  @id @default(uuid())
-  paymentId String  @unique
-  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  id                String            @id @default(uuid())
+  paymentId         String            @unique
+  payment           Payment           @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
   providerReference String            @unique
   externalReference String?
@@ -384,23 +397,25 @@ model Transaction {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // No deletedAt: Financial records must be immutable and preserved
 
   @@index([providerReference])
   @@index([status])
+  @@index([createdAt])
   @@map("transactions")
 }
 
 model Session {
-  id             String  @id @default(uuid())
-  customerId     String?
-  subscriptionId String?
-  voucherId      String? @unique
-  routerId       String
+  id             String        @id @default(uuid())
+  customerId     String?       // Optional for voucher users
+  subscriptionId String?       // Optional, but recommended
+  voucherId      String?       @unique
+  routerId       String?       // Optional in case router is unknown at login
 
-  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  voucher      Voucher?      @relation(fields: [voucherId], references: [id], onDelete: SetNull)
-  router       Router        @relation(fields: [routerId], references: [id], onDelete: Restrict)
+  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  voucher        Voucher?      @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+  router         Router?       @relation(fields: [routerId], references: [id], onDelete: SetNull)
 
   username       String?
   nasPort        String?
@@ -408,19 +423,20 @@ model Session {
   macAddress     String?
   callerId       String?
   terminateCause String?
-  sessionTime    Int       @default(0)
+  sessionTime    Int           @default(0)
   ipAddress      String?
-  loginTime      DateTime  @default(now())
+  loginTime      DateTime      @default(now())
   logoutTime     DateTime?
 
   uploadBytes      BigInt        @default(0)
   downloadBytes    BigInt        @default(0)
   totalBytes       BigInt        @default(0)
-  disconnectReason String?
+  disconnectReason String?       // Tracks why session ended (e.g., "MANUAL_DISCONNECT")
   status           SessionStatus @default(ACTIVE)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // No deletedAt: Usage history must be preserved for reporting
 
   @@index([loginTime])
   @@index([logoutTime])
@@ -434,9 +450,9 @@ model Session {
 }
 
 model AuditLog {
-  id     String  @id @default(uuid())
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id          String      @id @default(uuid())
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   action      AuditAction
   entity      AuditEntity
@@ -451,6 +467,7 @@ model AuditLog {
   success     Boolean     @default(true)
 
   createdAt DateTime @default(now())
+  // No deletedAt: Audit logs are immutable
 
   @@index([userId])
   @@index([action])

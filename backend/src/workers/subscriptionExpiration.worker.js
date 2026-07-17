@@ -22,10 +22,19 @@ const processExpiredSubscriptions = async () => {
     const expiredSubs = await prisma.subscription.findMany({
       where: {
         status: "ACTIVE",
-        endDate: { lt: now },
-        deletedAt: null,
+        endDate: { lt: now }
       },
-      select: { id: true, autoRenew: true, customerId: true, packageId: true },
+      select: {
+        id: true,
+        autoRenew: true,
+        customerId: true,
+        package: { select: { price: true } },
+        payments: {
+          select: { provider: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
     });
 
     if (expiredSubs.length === 0) return;
@@ -43,9 +52,23 @@ const processExpiredSubscriptions = async () => {
 
     logger.info(`[Worker] Expired ${expiredSubs.length} subscriptions.`);
 
-    // TODO: Implement Auto-Renewal Logic here if sub.autoRenew is true
-    // This would involve creating a new subscription or extending the endDate
-    // and creating a corresponding PENDING payment record.
+    const renewalPayments = expiredSubs
+      .filter((sub) => sub.autoRenew && sub.customerId)
+      .map((sub) => ({
+        customerId: sub.customerId,
+        subscriptionId: sub.id,
+        amount: sub.package.price,
+        provider: sub.payments[0]?.provider ?? "CASH",
+        status: "PENDING",
+        notes: "Auto-renewal payment",
+      }));
+
+    if (renewalPayments.length > 0) {
+      await prisma.payment.createMany({ data: renewalPayments });
+      logger.info(
+        `[Worker] Created ${renewalPayments.length} auto-renewal payments.`,
+      );
+    }
   } catch (error) {
     logger.error({ error }, "[Worker] Failed to process expired subscriptions");
   } finally {
@@ -60,3 +83,5 @@ export const startSubscriptionExpirationWorker = () => {
     "[Worker] Subscription Expiration Worker scheduled (Every 15 mins).",
   );
 };
+
+

@@ -66,6 +66,12 @@ export const SessionRepository = {
     });
   },
 
+  delete: async (id) => {
+    return prisma.session.delete({
+      where: { id },
+    });
+  },
+
   countActive: async () => {
     return prisma.session.count({ where: { status: "ACTIVE" } });
   },

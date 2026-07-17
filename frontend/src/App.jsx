@@ -3,6 +3,8 @@ import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminLayout from "./layout/AdminLayout";
+
+// Admin & Operator Pages
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Packages from "./pages/Packages";
@@ -14,16 +16,31 @@ import Sessions from "./pages/Sessions";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 
+// Customer & Public Pages
+import CaptivePortal from "./pages/CaptivePortal";
+import CustomerStatus from "./pages/CustomerStatus";
+
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <Toaster position="top-right" />
         <Routes>
-          {/* Public Route */}
+          {/* ==========================================
+              PUBLIC ROUTES (No Authentication Required)
+              Used by normal hotspot users and guests
+              ========================================== */}
           <Route path="/login" element={<Login />} />
 
-          {/* Protected Routes - Admin & Operator */}
+          {/* Captive Portal: The first screen a user sees when connecting to Wi-Fi */}
+          <Route path="/portal" element={<CaptivePortal />} />
+
+          {/* Customer Status: Shows remaining time/data after successful login */}
+          <Route path="/customer/status" element={<CustomerStatus />} />
+
+          {/* ==========================================
+              PROTECTED ROUTES - Admin & Operator
+              ========================================== */}
           <Route
             element={
               <ProtectedRoute allowedRoles={["ADMIN", "OPERATOR"]}>
@@ -41,7 +58,9 @@ function App() {
             <Route path="/reports" element={<Reports />} />
           </Route>
 
-          {/* Admin-Only Route */}
+          {/* ==========================================
+              PROTECTED ROUTES - Admin Only
+              ========================================== */}
           <Route
             path="/settings"
             element={
@@ -53,7 +72,11 @@ function App() {
             <Route index element={<Settings />} />
           </Route>
 
-          {/* Default Redirects */}
+          {/* ==========================================
+              DEFAULT REDIRECTS
+              ========================================== */}
+          {/* Default to dashboard for staff. 
+              (The MikroTik router will explicitly redirect hotspot users to /portal) */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

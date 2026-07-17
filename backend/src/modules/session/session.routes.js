@@ -8,11 +8,44 @@ import { startSessionSchema, stopSessionSchema, searchSessionSchema } from './va
 
 const router = Router();
 
-router.post('/start', authenticate, validate(startSessionSchema), audit('START', 'SESSION'), SessionController.start);
-router.post('/:id/stop', authenticate, authorize('ADMIN', 'OPERATOR'), validate(stopSessionSchema), audit('STOP', 'SESSION'), SessionController.stop);
+// ==========================================
+// Public Routes (For Captive Portal Users)
+// ==========================================
 
-router.get('/active/count', authenticate, SessionController.getActiveCount);
-router.get('/', authenticate, validate(searchSessionSchema), SessionController.getAll);
-router.get('/:id', authenticate, SessionController.getById);
+// Allows a voucher user to disconnect themselves. 
+// Security relies on the session ID being a hard-to-guess UUID.
+router.post('/:id/stop', validate(stopSessionSchema), SessionController.stop);
+
+
+// ==========================================
+// Protected Routes (Admin/Operator Only)
+// ==========================================
+
+router.post(
+    '/start',
+    authenticate,
+    validate(startSessionSchema),
+    audit('START', 'SESSION'),
+    SessionController.start
+);
+
+router.get(
+    '/active/count',
+    authenticate,
+    SessionController.getActiveCount
+);
+
+router.get(
+    '/',
+    authenticate,
+    validate(searchSessionSchema),
+    SessionController.getAll
+);
+
+router.get(
+    '/:id',
+    authenticate,
+    SessionController.getById
+);
 
 export default router;

@@ -19,7 +19,7 @@ const processExpiredVouchers = async () => {
     const now = new Date();
     const result = await prisma.voucher.updateMany({
       where: {
-        status: { in: ["GENERATED", "ACTIVE"] },
+        status: "ACTIVE",
         expiresAt: { not: null, lt: now },
         deletedAt: null,
       },

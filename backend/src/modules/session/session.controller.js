@@ -1,4 +1,3 @@
-// backend/src/modules/session/session.controller.js
 import { SessionService } from "./session.service.js";
 import { asyncHandler } from "../../shared/utils/async.handler.js";
 
@@ -12,26 +11,45 @@ export const SessionController = {
     });
   }),
 
+  /**
+   * Terminates an active session.
+   * Accessible by Admins, Customers, or the system (e.g., for expiry).
+   */
   stop: asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const session = await SessionService.stopSession(
-      id,
-      req.validatedData.body,
-      "ADMIN",
-    );
+
+    // Extract termination reason from body (e.g., "USER_REQUEST", "MANUAL_DISCONNECT")
+    // Defaults to "MANUAL_DISCONNECT" if not provided by the frontend
+    const disconnectReason = req.validatedData?.body?.reason || "MANUAL_DISCONNECT";
+
+    const session = await SessionService.stopSession(id, disconnectReason);
+    const sanitizedSession = {
+      ...session,
+      uploadBytes: session.uploadBytes ? session.uploadBytes.toString() : "0",
+      downloadBytes: session.downloadBytes ? session.downloadBytes.toString() : "0",
+      totalBytes: session.totalBytes ? session.totalBytes.toString() : "0",
+    };
+
     res.status(200).json({
       success: true,
       message: "Session terminated successfully.",
-      data: session,
+      data: sanitizedSession,
     });
   }),
 
   getAll: asyncHandler(async (req, res) => {
     const result = await SessionService.getSessions(req.validatedData.query);
+    const sanitizedData = result.data.map((session) => ({
+      ...session,
+      uploadBytes: session.uploadBytes ? session.uploadBytes.toString() : "0",
+      downloadBytes: session.downloadBytes ? session.downloadBytes.toString() : "0",
+      totalBytes: session.totalBytes ? session.totalBytes.toString() : "0",
+    }));
     res.status(200).json({
       success: true,
       message: "Sessions retrieved successfully.",
       ...result,
+      data: sanitizedData,
     });
   }),
 

@@ -1,4 +1,3 @@
-// backend/src/modules/subscription/subscription.repository.js
 import { prisma } from "../../shared/database/prisma.js";
 
 export const SubscriptionRepository = {
@@ -21,8 +20,9 @@ export const SubscriptionRepository = {
   },
 
   findById: async (id) => {
-    return prisma.subscription.findFirst({
-      where: { id, deletedAt: null },
+
+    return prisma.subscription.findUnique({
+      where: { id },
       include: {
         customer: {
           select: {
@@ -41,6 +41,7 @@ export const SubscriptionRepository = {
   },
 
   findMany: async (where, skip, take) => {
+
     const [data, total] = await prisma.$transaction([
       prisma.subscription.findMany({
         where,

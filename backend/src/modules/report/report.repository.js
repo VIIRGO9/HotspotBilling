@@ -12,7 +12,7 @@ export const ReportRepository = {
 
       // 2. Active Subscriptions
       prisma.subscription.count({
-        where: { status: "ACTIVE", deletedAt: null },
+        where: { status: "ACTIVE" },
       }),
 
       // 3. Active Sessions

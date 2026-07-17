@@ -28,7 +28,7 @@ export const stopSessionSchema = z.object({
     terminateCause: z.string().max(255).optional(), // e.g., 'TIME_EXPIRED', 'ADMIN_DISCONNECT', 'DATA_EXHAUSTED'
     uploadBytes: z.number().int().min(0).optional(),
     downloadBytes: z.number().int().min(0).optional(),
-  }),
+  }).optional(),
 });
 
 export const searchSessionSchema = z.object({
