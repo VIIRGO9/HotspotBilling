@@ -85,7 +85,7 @@ export const RouterService = {
 
     // Build where clause
     const where = {
-      // Only apply deletedAt: null if we are NOT including archived routers (Soft Delete Policy)
+      // Apply soft-delete filter only when archived routers are not included.
       ...(includeArchived ? {} : { deletedAt: null }),
       ...(query.status && { status: query.status }),
       ...(query.type && { type: query.type }),
@@ -175,7 +175,7 @@ export const RouterService = {
     if (!existing) throw new AppError("Router not found.", 404, "ROUTER_002");
     if (existing.deletedAt) throw new AppError("Cannot change status of an archived router.", 400, "ROUTER_006");
 
-    // CRITICAL: If trying to set to ONLINE, we MUST verify the connection first
+    // When setting status to ONLINE, verify the router connection before updating.
     if (status === "ONLINE") {
       const isConnected = await testTcpConnection(existing.ipAddress, existing.apiPort || 8728);
 

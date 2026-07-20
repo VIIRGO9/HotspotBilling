@@ -16,7 +16,7 @@ router.patch('/:id/activate', authorize('ADMIN', 'OPERATOR'), validate(subscript
 router.patch('/:id/cancel', authorize('ADMIN', 'OPERATOR'), validate(subscriptionIdSchema), audit('CANCEL', 'SUBSCRIPTION'), SubscriptionController.cancel);
 router.patch('/:id/renew', authorize('ADMIN', 'OPERATOR'), validate(subscriptionIdSchema), audit('RENEW', 'SUBSCRIPTION'), SubscriptionController.renew);
 
-// Read operations - no audit needed
+// Read operations do not require audit logging.
 router.get('/', validate(getSubscriptionsSchema), SubscriptionController.getAll);
 router.get('/:id', validate(subscriptionIdSchema), SubscriptionController.getById);
 

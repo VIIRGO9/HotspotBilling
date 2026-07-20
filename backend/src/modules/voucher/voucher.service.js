@@ -239,7 +239,6 @@ export const VoucherService = {
           },
         });
 
-        // Create Session
         const session = await tx.session.create({
           data: {
             customerId: null,
@@ -255,6 +254,27 @@ export const VoucherService = {
             downloadBytes: 0,
           },
         });
+
+        if (resolvedRouterId) {
+          try {
+            await RouterAdapterService.authorizeAccess(resolvedRouterId, {
+              sessionId: session.id,
+              macAddress,
+              ipAddress: clientIp || "0.0.0.0",
+              speedLimit: pkg.downloadSpeedMbps ? `${pkg.downloadSpeedMbps} Mbps` : "Unlimited",
+            });
+          } catch (error) {
+            logger.error(
+              { error, routerId: resolvedRouterId, voucherCode: code },
+              "[VoucherService] Router authorization failed; rolling back voucher activation"
+            );
+            throw new AppError(
+              "Router synchronization failed. Your voucher was not activated and remains available. Please try again in a moment.",
+              503,
+              "VOUCHER_011"
+            );
+          }
+        }
 
         return {
           success: true,
@@ -275,51 +295,6 @@ export const VoucherService = {
         timeout: 30000, // 30 second timeout for transaction
       }
     );
-
-    // Router I/O must not run inside the Prisma transaction.  Once the local
-    // activation commits, provision the Hotspot account for this device.
-    if (resolvedRouterId) {
-      try {
-        await RouterAdapterService.authorizeAccess(resolvedRouterId, {
-          sessionId: activation.data.sessionId,
-          macAddress,
-          ipAddress: clientIp || "0.0.0.0",
-          speedLimit: activation.data.speedLimit,
-        });
-      } catch (error) {
-        logger.error(
-          { error, routerId: resolvedRouterId, voucherCode: code },
-          "[VoucherService] Router authorization failed; rolling back voucher activation"
-        );
-
-        try {
-          await RouterAdapterService.disconnectUser(
-            resolvedRouterId,
-            activation.data.sessionId,
-            macAddress
-          );
-        } catch (cleanupError) {
-          logger.warn(
-            { cleanupError, routerId: resolvedRouterId, voucherCode: code },
-            "[VoucherService] Unable to clean up Hotspot user after authorization failure"
-          );
-        }
-        await prisma.$transaction(async (tx) => {
-          await tx.session.delete({ where: { id: activation.data.sessionId } });
-          await tx.subscription.delete({ where: { id: activation.data.subscriptionId } });
-          await tx.voucher.update({
-            where: { code },
-            data: { status: "ACTIVE", usedAt: null },
-          });
-        });
-
-        throw new AppError(
-          "Router authorization failed. Voucher activation was rolled back.",
-          502,
-          "VOUCHER_011"
-        );
-      }
-    }
 
     return activation;
   },

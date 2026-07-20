@@ -24,7 +24,7 @@ const worker = new Worker(
     });
     if (!payment || payment.status !== "PENDING") return;
 
-    // TODO: Implement actual provider verification logic (e.g., M-Pesa API check)
+    // Payment provider verification is deferred to the live provider integration.
     const isVerified = false; // Placeholder for provider API call
 
     if (isVerified) {

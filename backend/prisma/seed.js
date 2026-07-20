@@ -24,7 +24,7 @@ async function main() {
   });
   console.log(`Created Admin User: ${admin.email}`);
 
-  // 2. Create Sample Internet Packages
+  // 2. Create default internet package seed data.
   const packagesData = [
     {
       name: "1 Hour Basic",

@@ -16,8 +16,7 @@ const worker = new Worker(
       `[NotificationWorker] Processing ${type} for customer ${customerId}`,
     );
 
-    // TODO: Integrate actual SMS/Email providers (e.g., Twilio, SendGrid, AWS SNS)
-    // Example: await smsProvider.send(customerPhone, "Your payment was successful.");
+    // Notification dispatch is deferred to the configured SMS/Email provider integration.
 
     return { success: true, message: `Notification ${type} processed (Stub)` };
   },

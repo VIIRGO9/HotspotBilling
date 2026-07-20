@@ -1,7 +1,7 @@
 // backend/src/shared/utils/voucherCodeGenerator.js
 import crypto from "crypto";
 
-// 32-character set excluding ambiguous characters (I, O, 0, 1)
+// Character set excludes visually ambiguous characters to reduce transcription errors.
 const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 12;
 const GROUP_SIZE = 4;
